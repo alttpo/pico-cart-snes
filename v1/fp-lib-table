@@ -1,5 +1,4 @@
 (fp_lib_table
-  (lib (name "RP-Pico")(type "KiCad")(uri "I:/Developer/me/alttpo/cart/KiCad-RP-Pico-main/RP-Pico Libraries/MCU_RaspberryPi_and_Boards.pretty")(options "")(descr ""))
   (lib (name "RPi_Pico")(type "KiCad")(uri "${KIPRJMOD}/RPi_Pico.pretty")(options "")(descr ""))
   (lib (name "SNES")(type "KiCad")(uri "${KIPRJMOD}/SNES.pretty")(options "")(descr ""))
 )
