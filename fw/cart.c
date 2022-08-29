@@ -232,13 +232,13 @@ int main() {
     // Load the psram_qspi_write program, and configure a free state machine
     // to run the program.
     PIO pio = pio0;
-    uint offset = pio_add_program(pio, &spi_cpha1_cs_program);
+    uint offset = pio_add_program(pio, &spi_cs_program);
     uint sm = pio_claim_unused_sm(pio, true);
     pio_spi_cs_init(pio, sm, offset,
         8,
         1.0f,
         false,
-        PCS_B_PSRAM_CE,
+        PCS_B_CLK_133MHZ,
         PCS_B_PSRAM_SIO0,
         PCS_B_PSRAM_SIO1
     );
