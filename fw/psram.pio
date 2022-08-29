@@ -97,7 +97,7 @@ static inline uint32_t reverse_nybbles(uint32_t num) {
     return num;
 }
 
-static inline void psram_write(PIO pio, uint sm, uint offset) {
+static inline void psram_qwrite(PIO pio, uint sm, uint offset) {
     // PC
     pio_sm_put_blocking(pio, sm, (offset + psram_qspi_offset_write) << 27);
 }

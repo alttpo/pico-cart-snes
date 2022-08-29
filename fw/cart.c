@@ -242,13 +242,15 @@ int main() {
         PCS_B_PSRAM_SIO0,
         PCS_B_PSRAM_SIO1
     );
- 
+
+    gpio_put(PCS_B_PSRAM_CE, true);
+
 #if LOGIC_ANALYZER
     puts("la_arm...");
     la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
+    sleep_us(1);
 #endif
 
-    // to reset PSRAM, n-2=6 h66 reset-enable, n-2=6 h99 reset:
     psram_reset(pio, sm);
 
 #if LOGIC_ANALYZER
@@ -259,6 +261,7 @@ int main() {
     la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
 
     la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
+    sleep_us(1);
 #endif
 
     psram_read_eid(pio, sm);

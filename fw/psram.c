@@ -57,7 +57,7 @@ void __time_critical_func(pio_spi_write8_read8_blocking)(PIO pio, uint sm, uint8
     }
 }
 
-void psram_reset(PIO pio, uint sm) {
+void __time_critical_func(psram_reset)(PIO pio, uint sm) {
     uint8_t cmd[2] = {
         0x66,
         0x99
@@ -66,13 +66,15 @@ void psram_reset(PIO pio, uint sm) {
     gpio_put(PCS_B_PSRAM_CE, false);
     pio_spi_write8_blocking(pio, sm, &cmd[0], 1);
     gpio_put(PCS_B_PSRAM_CE, true);
-
+    gpio_put(PCS_B_PSRAM_CE, true);
+    gpio_put(PCS_B_PSRAM_CE, true);
+    gpio_put(PCS_B_PSRAM_CE, true);
     gpio_put(PCS_B_PSRAM_CE, false);
     pio_spi_write8_blocking(pio, sm, &cmd[1], 1);
     gpio_put(PCS_B_PSRAM_CE, true);
 }
 
-void psram_read_eid(PIO pio, uint sm) {
+void __time_critical_func(psram_read_eid)(PIO pio, uint sm) {
     uint8_t cmd[13] = {
         // read eid command
         0x9F,
