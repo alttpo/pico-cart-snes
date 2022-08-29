@@ -196,11 +196,15 @@ int main() {
         sleep_ms(10);
     }
 
-    puts("sys: set 48Mhz...");
-    set_sys_clock_48mhz();
+    // puts("sys: set 48Mhz...");
+    // set_sys_clock_48mhz();
+    // puts("sys: set 133Mhz...");
+    // set_sys_clock_khz(133000, true);
+    puts("sys: set 266Mhz...");
+    set_sys_clock_khz(266000, true);
 
 #if LOGIC_ANALYZER
-#define CAPTURE_N_SAMPLES 224
+#define CAPTURE_N_SAMPLES 1024
 #define CAPTURE_PIN_COUNT 6
 #define CAPTURE_PIN_BASE PCS_B_PSRAM_SIO0
 
