@@ -1,0 +1,157 @@
+; QSPI Pins:
+;   OUT pin 0 = SIO0/SI   LSB
+;   OUT pin 1 = SIO1/SO
+;   OUT pin 2 = SIO2
+;   OUT pin 3 = SIO3      MSB
+;   OUT pin 4 = CE#
+;   OUT pin 5 = CLK
+
+; NOTE: since pins are in 0..3 order physically, each nybble (both TX and RX) must be bit-reversed at the system level
+
+.program psram_qspi
+.side_set 2
+
+; || 31:27 | 26:0 ||
+; || PC    | null ||
+public entry_point:
+    out x, 5            side 0b10   ; set CE#=1, CLK=0; wait for 32-bits from TX FIFO and copy to X as a count of nybbles
+    out null, 32        side 0b10
+    mov pc, x           side 0b10
+
+; || 31:0    || 31:24 | 23:0 || data in nybbles ...
+; || count-1 || cmd   | addr || data in nybbles ...
+public write:
+    ; copy out data length in nybbles to X:
+    out x, 32               side 0b10
+    ; send command and address (8 nybbles):
+    set y, 7                side 0b10
+write_cmd_loop:
+    out pins, 4             side 0b01   ; set CE#=0, CLK=1; write 4 bits to SIO[3:0]
+    jmp y-- write_cmd_loop  side 0b00   ; set CE#=0, CLK=0; jump to cmd_loop if Y>0; post-decrement Y
+    ; send data in nybbles:
+write_loop:
+    out pins, 4             side 0b01   ; set CE#=0, CLK=1; write 4 bits to SIO[3:0]
+    jmp x-- write_loop      side 0b00   ; set CE#=0, CLK=0; jump to nybloop if X>0; post-decrement X
+    jmp entry_point         side 0b10
+
+public read:
+    ; copy out data length in nybbles to X:
+    out x, 32               side 0b10
+    ; send command and address (8 nybbles):
+    set y, 7                side 0b10
+read_cmd_loop:
+    out pins, 4             side 0b01   ; set CE#=0, CLK=1; write 4 bits to SIO[3:0]
+    jmp y-- read_cmd_loop   side 0b00   ; set CE#=0, CLK=0; jump to cmd_loop if Y>0; post-decrement Y
+
+    set y, 7                side 0b00
+read_wait_loop:
+    nop                     side 0b01
+    jmp y-- read_wait_loop  side 0b00
+read_loop:
+    in pins, 4              side 0b01   ; set CE#=0, CLK=1; read 4 bits from SIO[3:0]
+    jmp x-- read_loop       side 0b00   ; set CE#=0, CLK=0; jump to nybloop if X>0; post-decrement X
+    jmp entry_point         side 0b10
+
+
+% c-sdk {
+static inline void psram_qspi_program_init(PIO pio, uint sm, uint offset, uint pin) {
+    pio_sm_config c = psram_qspi_program_get_default_config(offset);
+
+    // Side-set pins are CE# and CLK pins, in that order:
+    sm_config_set_sideset_pins(&c, pin + 4);
+    sm_config_set_out_pins(&c, pin, 6);
+
+    // Connect these GPIOs to this PIO block
+    pio_gpio_init(pio, pin + 0);
+    pio_gpio_init(pio, pin + 1);
+    pio_gpio_init(pio, pin + 2);
+    pio_gpio_init(pio, pin + 3);
+    pio_gpio_init(pio, pin + 4);
+    pio_gpio_init(pio, pin + 5);
+
+    // Set all 6 pin directions to output at the PIO
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 6, true);
+
+    // Shift OSR left for MSB to LSB order:
+    sm_config_set_out_shift(
+        &c,
+        false, // Shift-to-right = false (i.e. shift to left)
+        true,  // Autopull enabled
+        32     // Autopull threshold = 32
+    );
+
+    // We only write, so disable the RX FIFO to make the TX FIFO deeper.
+    //sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+    // Load our configuration, and start the program from the beginning
+    pio_sm_init(pio, sm, offset + psram_qspi_offset_entry_point, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+// reverses bit order of each nybble in each byte:
+// 1000 -> 0001
+// 1011 -> 1101
+static inline uint32_t reverse_nybbles(uint32_t num) {
+    num = (((num & 0xaaaaaaaaUL) >> 1) | ((num & 0x55555555UL) << 1));
+    num = (((num & 0xccccccccUL) >> 2) | ((num & 0x33333333UL) << 2));
+    return num;
+}
+
+static inline void psram_write(PIO pio, uint sm, uint offset) {
+    // PC
+    pio_sm_put_blocking(pio, sm, (offset + psram_qspi_offset_write) << 27);
+}
+%}
+
+; CPHA=1: data transitions on the leading edge of each SCK pulse, and is
+; captured on the trailing edge
+
+.program spi_cpha1_cs
+.side_set 2
+
+.wrap_target
+bitloop:
+    out pins, 1        side 0b10 [1]
+    in pins, 1         side 0b00
+    jmp x-- bitloop    side 0b00
+
+    out pins, 1        side 0b10
+    mov x, y           side 0b10
+    in pins, 1         side 0b00
+    jmp !osre bitloop  side 0b00
+
+public entry_point:                     ; Must set X,Y to n-2 before starting!
+    pull ifempty       side 0b01 [1]    ; Block with CE# high (minimum 2 cycles)
+    nop                side 0b00 [1]    ; CE# front porch
+.wrap
+
+% c-sdk {
+#include "hardware/gpio.h"
+static inline void pio_spi_cs_init(PIO pio, uint sm, uint prog_offs,
+    uint n_bits, float clkdiv, bool cpol,
+    uint pin_ce, uint pin_mosi, uint pin_miso
+) {
+    pio_sm_config c = spi_cpha1_cs_program_get_default_config(prog_offs);
+    sm_config_set_out_pins(&c, pin_mosi, 1);
+    sm_config_set_in_pins(&c, pin_miso);
+    sm_config_set_sideset_pins(&c, pin_ce);
+    sm_config_set_out_shift(&c, false, true, n_bits);
+    sm_config_set_in_shift(&c, false, true, n_bits);
+    sm_config_set_clkdiv(&c, clkdiv);
+
+    pio_sm_set_pins_with_mask(pio, sm, (1u << pin_ce), (3u << pin_ce) | (1u << pin_mosi));
+    pio_sm_set_pindirs_with_mask(pio, sm, (3u << pin_ce) | (1u << pin_mosi), (3u << pin_ce) | (1u << pin_mosi) | (1u << pin_miso));
+    pio_gpio_init(pio, pin_mosi);
+    pio_gpio_init(pio, pin_miso);
+    pio_gpio_init(pio, pin_ce);
+    pio_gpio_init(pio, pin_ce + 1); // clk
+    gpio_set_outover(pin_ce + 1, cpol ? GPIO_OVERRIDE_INVERT : GPIO_OVERRIDE_NORMAL);
+    hw_set_bits(&pio->input_sync_bypass, 1u << pin_miso);
+
+    uint entry_point = prog_offs + spi_cpha1_cs_offset_entry_point;
+    pio_sm_init(pio, sm, entry_point, &c);
+    pio_sm_exec(pio, sm, pio_encode_set(pio_x, n_bits - 2));
+    pio_sm_exec(pio, sm, pio_encode_set(pio_y, n_bits - 2));
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
