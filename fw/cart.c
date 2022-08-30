@@ -198,13 +198,17 @@ int main() {
 
     // puts("sys: set 48Mhz...");
     // set_sys_clock_48mhz();
+    puts("sys: set 84Mhz...");
+    set_sys_clock_khz( 84000, true);
     // puts("sys: set 133Mhz...");
     // set_sys_clock_khz(133000, true);
-    puts("sys: set 266Mhz...");
-    set_sys_clock_khz(266000, true);
+    // puts("sys: set 144Mhz...");
+    // set_sys_clock_khz(144000, true);
+    // puts("sys: set 266Mhz...");
+    // set_sys_clock_khz(266000, true);
 
 #if LOGIC_ANALYZER
-#define CAPTURE_N_SAMPLES 1024
+#define CAPTURE_N_SAMPLES 384
 #define CAPTURE_PIN_COUNT 6
 #define CAPTURE_PIN_BASE PCS_B_PSRAM_SIO0
 
@@ -213,22 +217,11 @@ int main() {
     hard_assert(la_capture_buf);
 
     PIO  la_pio = pio1;
-    uint la_sm = 0;
-    uint la_dma_chan = 0;
+    uint la_sm = pio_claim_unused_sm(la_pio, true);
+    uint la_dma_chan = dma_claim_unused_channel(true);
 
     puts("la_init...");
     la_init(la_pio, la_sm, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, 1.f);
-#endif
-
-#if 0
-    // reset PSRAM:
-    puts("psram: reset enable...");
-    psram_spi_cmd0(0x66);  // Reset Enable
-    puts("psram: reset...");
-    psram_spi_cmd0(0x99);  // Reset
-
-    puts("psram: read eid...");
-    psram_spi_read_eid();
 #endif
 
     puts("psram: load SPI PIO...");
@@ -236,7 +229,7 @@ int main() {
     // Load the psram_qspi_write program, and configure a free state machine
     // to run the program.
     PIO pio = pio0;
-    uint offset = pio_add_program(pio, &spi_cs_program);
+    uint offset = pio_add_program(pio, &spi_wr_rd_program);
     uint sm = pio_claim_unused_sm(pio, true);
     pio_spi_cs_init(pio, sm, offset,
         8,
@@ -247,14 +240,13 @@ int main() {
         PCS_B_PSRAM_SIO1
     );
 
-    gpio_put(PCS_B_PSRAM_CE, true);
-
 #if LOGIC_ANALYZER
     puts("la_arm...");
     la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
     sleep_us(1);
 #endif
 
+    puts("psram: reset");
     psram_reset(pio, sm);
 
 #if LOGIC_ANALYZER
@@ -268,6 +260,8 @@ int main() {
     sleep_us(1);
 #endif
 
+#if 1
+    puts("psram: read_eid");
     psram_read_eid(pio, sm);
 
 #if LOGIC_ANALYZER
@@ -276,6 +270,8 @@ int main() {
     dma_channel_wait_for_finish_blocking(la_dma_chan);
 
     la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
+    sleep_us(1);
+#endif
 #endif
 
 #if 0
@@ -304,5 +300,8 @@ int main() {
     while (!pio_sm_is_exec_stalled(pio, sm)) tight_loop_contents();
 #endif
 
-    puts("done\n");
+    printf("done\n");
+    sleep_us(1);
+
+    return 0;
 }

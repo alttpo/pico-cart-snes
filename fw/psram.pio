@@ -103,22 +103,27 @@ static inline void psram_qwrite(PIO pio, uint sm, uint offset) {
 }
 %}
 
-.program spi_cs
+.program spi_wr_rd
 .side_set 1
 
 .wrap_target
-bitloop:
-    out pins, 1        side 0b0 [1]
-    in pins, 1         side 0b1
-    jmp x-- bitloop    side 0b1
+wrloop:
+    out pins, 1         side 0b0
+    jmp x-- wrloop      side 0b1    ; X contains number of bits to write - 1
+    jmp !y reset        side 0b0    ; nothing to read?
 
-    out pins, 1        side 0b0
-    mov x, y           side 0b0
-    in pins, 1         side 0b1
-    jmp !osre bitloop  side 0b1
+   ;nop                 side 0b0
+rdloop:
+    in pins, 1          side 0b1
+    jmp y-- rdloop      side 0b0    ; Y contains number of bits to read - 1
 
-public entry_point:                 ; Must set X,Y to n-2 before starting!
-    pull ifempty       side 0b0 [1] ; Block (minimum 2 cycles)
+reset:
+    out null, 32        side 0b0    ; clear data
+    irq wait 0          side 0b0    ; set IRQ to indicate completion and wait until cleared by C code
+public entry_point:
+    out x, 8            side 0b0    ; X = number of bits to write - 1
+   ;jmp !x reset        side 0b0    ; if X==0 then retry
+    out y, 8            side 0b0    ; Y = number of bits to read - 1
 .wrap
 
 % c-sdk {
@@ -127,11 +132,11 @@ static inline void pio_spi_cs_init(PIO pio, uint sm, uint prog_offs,
     uint n_bits, float clkdiv, bool cpol,
     uint pin_clk, uint pin_mosi, uint pin_miso
 ) {
-    pio_sm_config c = spi_cs_program_get_default_config(prog_offs);
+    pio_sm_config c = spi_wr_rd_program_get_default_config(prog_offs);
     sm_config_set_out_pins(&c, pin_mosi, 1);
     sm_config_set_in_pins(&c, pin_miso);
     sm_config_set_sideset_pins(&c, pin_clk);
-    sm_config_set_out_shift(&c, false, true, n_bits);
+    sm_config_set_out_shift(&c, false, true, 32);
     sm_config_set_in_shift(&c, false, true, n_bits);
     sm_config_set_clkdiv(&c, clkdiv);
 
@@ -143,10 +148,14 @@ static inline void pio_spi_cs_init(PIO pio, uint sm, uint prog_offs,
     gpio_set_outover(pin_clk, cpol ? GPIO_OVERRIDE_INVERT : GPIO_OVERRIDE_NORMAL);
     hw_set_bits(&pio->input_sync_bypass, 1u << pin_miso);
 
-    uint entry_point = prog_offs + spi_cs_offset_entry_point;
+    // Clear IRQ flag before starting, and make sure flag doesn't actually
+    // assert a system-level interrupt (we're using it as a status flag)
+    pio_set_irq0_source_enabled(pio, pis_interrupt0 + sm, false);
+    pio_set_irq1_source_enabled(pio, pis_interrupt0 + sm, false);
+    pio_interrupt_clear(pio, sm);
+
+    uint entry_point = prog_offs + spi_wr_rd_offset_entry_point;
     pio_sm_init(pio, sm, entry_point, &c);
-    pio_sm_exec(pio, sm, pio_encode_set(pio_x, n_bits - 2));
-    pio_sm_exec(pio, sm, pio_encode_set(pio_y, n_bits - 2));
     pio_sm_set_enabled(pio, sm, true);
 }
 %}
