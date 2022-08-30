@@ -198,10 +198,10 @@ int main() {
 
     // puts("sys: set 48Mhz...");
     // set_sys_clock_48mhz();
-    puts("sys: set 84Mhz...");
-    set_sys_clock_khz( 84000, true);
-    // puts("sys: set 133Mhz...");
-    // set_sys_clock_khz(133000, true);
+    // puts("sys: set 84Mhz...");
+    // set_sys_clock_khz( 84000, true);
+    puts("sys: set 133Mhz...");
+    set_sys_clock_khz(133000, true);
     // puts("sys: set 144Mhz...");
     // set_sys_clock_khz(144000, true);
     // puts("sys: set 266Mhz...");

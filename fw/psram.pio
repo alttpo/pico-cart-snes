@@ -112,10 +112,12 @@ wrloop:
     jmp x-- wrloop      side 0b1    ; X contains number of bits to write - 1
     jmp !y reset        side 0b0    ; nothing to read?
 
-   ;nop                 side 0b0
+    nop                 side 0b1
+    nop                 side 0b0
+    nop                 side 0b1
 rdloop:
-    in pins, 1          side 0b1
-    jmp y-- rdloop      side 0b0    ; Y contains number of bits to read - 1
+    in  pins, 1         side 0b0
+    jmp y-- rdloop      side 0b1    ; Y contains number of bits to read - 1
 
 reset:
     out null, 32        side 0b0    ; clear data
