@@ -2,7 +2,8 @@
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
 #include "hardware/pio.h"
-#include "hardware/spi.h"
+//#include "hardware/spi.h"
+#include "hardware/dma.h"
 #include "psram.pio.h"
 #include "cart.h"
 #include "psram.h"
@@ -10,6 +11,8 @@
 PIO pio = pio0;
 uint sm = 0;
 const uint offset = 0;
+int dma_chan = -1;
+dma_channel_config dma_config = {0};
 
 // reverses bit order of each nibble in each byte:
 // 1000 -> 0001
@@ -106,26 +109,28 @@ void __time_critical_func(psram_write)() {
     psram_set_ce();
 }
 
-void __time_critical_func(psram_read)() {
+void __time_critical_func(psram_read)(uint32_t addr, uint32_t* d, uint size) {
+    dma_channel_configure(
+        dma_chan,
+        &dma_config,
+        d,              // Destination pointer
+        &pio->rxf[sm],  // Source pointer
+        size,           // Number of transfers in words (32-bit)
+        true            // Start immediately
+    );
+
     psram_clr_ce();
     // write 32 bits, cmd 0x0B, address 0x00_00_00
     pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write, 32, false));
-    pio_sm_put_blocking(pio, sm, 0x0B000000UL);
+    pio_sm_put_blocking(pio, sm, 0x0B000000UL | (addr & 0x00FFFFFFUL));
     // wait 8 clocks:
     pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write,  8, false));
     pio_sm_put_blocking(pio, sm, 0x00000000UL);
     // read 16 bits:
     pio_sm_put_blocking(pio, sm, psram_op(spi_offset_read,  16,  true));
-    uint32_t d[2] = {0,0};
-    for (int i = 0; i < 2; i++) {
-        //printf("await read\n");
-        d[i] = pio_sm_get_blocking(pio, sm);
-    }
     //printf("wait_for_completion\n");
     psram_wait_for_completion();
     psram_set_ce();
-
-    printf("read %02x %02x\n", d[0], d[1]);
 }
 
 void __time_critical_func(psram_set_qpi_mode)() {
@@ -165,30 +170,31 @@ void __time_critical_func(psram_set_spi_mode)() {
     );
 }
 
-void __time_critical_func(psram_qread)() {
+void __time_critical_func(psram_qread)(uint32_t addr, uint32_t* d, uint size) {
+    dma_channel_configure(
+        dma_chan,
+        &dma_config,
+        d,              // Destination pointer
+        &pio->rxf[sm],  // Source pointer
+        size,           // Number of transfers in words (32-bit)
+        true            // Start immediately
+    );
+
     psram_clr_ce();
-    // write 32 bits, cmd 0xEB, address 0x00_00_00
+    // write 32 bits, cmd 0xEB, address
     pio_sm_put_blocking(pio, sm, psram_op(qspi_offset_write, 8, false));
-    pio_sm_put(pio, sm, (0xEB000000UL));
+    pio_sm_put(pio, sm, (0xEB000000UL | (addr & 0x00FFFFFFUL)));
     // wait 6 clocks:
     pio_sm_put_blocking(pio, sm, psram_op(qspi_offset_write, 6, false));
     pio_sm_put(pio, sm, (0x00000000UL));
-    // read 16 bits:
-    pio_sm_put_blocking(pio, sm, psram_op(qspi_offset_read,  4,  true));
-    uint32_t d[2] = {0,0};
-    for (int i = 0; i < 2; i++) {
-        //printf("await read\n");
-        d[i] = pio_sm_get_blocking(pio, sm);
-        //printf("read %02x\n", data);
-    }
+    // read `size*2` nibbles from PSRAM, transfer to DMA in words:
+    pio_sm_put_blocking(pio, sm, psram_op(qspi_offset_read, size*2,  true));
     //printf("wait_for_completion\n");
     psram_wait_for_completion();
     psram_set_ce();
-
-    printf("read %02x %02x\n", d[0], d[1]);
 }
 
-void __time_critical_func(psram_init)() {
+void psram_init() {
     // load PIO program for SPI:
     pio_add_program_at_offset(pio, &spi_program, offset);
     sm = pio_claim_unused_sm(pio, true);
@@ -199,6 +205,13 @@ void __time_critical_func(psram_init)() {
         PCS_B_PSRAM_SIO0,
         PCS_B_PSRAM_SIO1
     );
+
+    // set up a DMA channel to read from RX FIFO:
+    dma_chan = dma_claim_unused_channel(true);
+    dma_config = dma_channel_get_default_config(dma_chan);
+    channel_config_set_read_increment(&dma_config, false);
+    channel_config_set_write_increment(&dma_config, true);
+    channel_config_set_dreq(&dma_config, pio_get_dreq(pio, sm, false));
 
     // reset psram chip:
     psram_reset();

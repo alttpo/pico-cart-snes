@@ -124,6 +124,8 @@ uint la_calc_buf_size_words(uint samples, uint pins);
 #endif
 
 int main() {
+    uint32_t d[2] = {0,0};
+
     stdio_init_all();
 
     // take software control over PSRAM to initialize it:
@@ -282,7 +284,9 @@ int main() {
 
 #if 1
     puts("psram: read");
-    psram_read();
+    psram_read(0x000000UL, d, 2);
+
+    printf("read %02x %02x\n", d[0], d[1]);
 
 #if LOGIC_ANALYZER
     // The logic analyser should have started capturing as soon as it saw the
@@ -314,7 +318,9 @@ int main() {
 
 #if 1
     puts("psram: quad read");
-    psram_qread();
+    psram_qread(0x000000UL, d, 2);
+
+    printf("read %02x %02x\n", d[0], d[1]);
 
 #if LOGIC_ANALYZER
     // The logic analyser should have started capturing as soon as it saw the
@@ -343,6 +349,7 @@ int main() {
 #endif
 
     printf("done\n");
+    stdio_flush();
     sleep_us(10000);
 
     return 0;

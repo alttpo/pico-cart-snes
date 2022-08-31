@@ -11,4 +11,4 @@ void __time_critical_func(psram_qread)();
 
 void __time_critical_func(psram_set_qpi_mode)();
 void __time_critical_func(psram_set_spi_mode)();
-void __time_critical_func(psram_init)();
+void psram_init();
