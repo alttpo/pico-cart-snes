@@ -200,12 +200,14 @@ int main() {
     // set_sys_clock_48mhz();
     // puts("sys: set 84Mhz...");
     // set_sys_clock_khz( 84000, true);
-    puts("sys: set 104Mhz...");
-    set_sys_clock_khz(104000, true);
+    // puts("sys: set 104Mhz...");
+    // set_sys_clock_khz(104000, true);
     // puts("sys: set 133Mhz...");
     // set_sys_clock_khz(133000, true);
     // puts("sys: set 144Mhz...");
     // set_sys_clock_khz(144000, true);
+    puts("sys: set 208Mhz...");
+    set_sys_clock_khz(208000, true);
     // puts("sys: set 266Mhz...");
     // set_sys_clock_khz(266000, true);
 
@@ -335,7 +337,7 @@ int main() {
 #endif
 
     printf("done\n");
-    sleep_us(100);
+    sleep_us(1000);
 
     return 0;
 }

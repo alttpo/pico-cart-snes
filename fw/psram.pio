@@ -116,8 +116,8 @@ public write:
     out x, 5            side 0      ; nnnnn = number of bits to write - 1 (0..31 = 1..32)
     pull                side 0      ; pull 32 bits of data to write
 wrloop:
-    out pins, 1         side 0
-    jmp x-- wrloop      side 1
+    out pins, 1         side 0 [1]
+    jmp x-- wrloop      side 1 [1]
     jmp complete        side 0
 
 public read:
@@ -126,7 +126,7 @@ rdloop:
     nop                 side 1
     nop                 side 0
     in  pins, 1         side 0
-    jmp x-- rdloop      side 1
+    jmp x-- rdloop      side 1      ; FIXME: extra clock pulse on last bit
 
 complete:
     jmp !y entry_point  side 0      ; if Y=0, skip IRQ0 set/wait

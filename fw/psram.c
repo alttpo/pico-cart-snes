@@ -6,59 +6,6 @@
 #include "psram.pio.h"
 #include "cart.h"
 
-#if 0
-void __time_critical_func(pio_spi_write8_blocking)(PIO pio, uint sm, const uint8_t *src, size_t len) {
-    size_t tx_remain = len, rx_remain = len;
-    // Do 8 bit accesses on FIFO, so that write data is byte-replicated. This
-    // gets us the left-justification for free (for MSB-first shift-out)
-    io_rw_8 *txfifo = (io_rw_8 *) &pio->txf[sm];
-    io_rw_8 *rxfifo = (io_rw_8 *) &pio->rxf[sm];
-    while (tx_remain || rx_remain) {
-        if (tx_remain && !pio_sm_is_tx_fifo_full(pio, sm)) {
-            *txfifo = *src++;
-            --tx_remain;
-        }
-        if (rx_remain && !pio_sm_is_rx_fifo_empty(pio, sm)) {
-            (void) *rxfifo;
-            --rx_remain;
-        }
-    }
-}
-
-void __time_critical_func(pio_spi_read8_blocking)(PIO pio, uint sm, uint8_t *dst, size_t len) {
-    size_t tx_remain = len, rx_remain = len;
-    io_rw_8 *txfifo = (io_rw_8 *) &pio->txf[sm];
-    io_rw_8 *rxfifo = (io_rw_8 *) &pio->rxf[sm];
-    while (tx_remain || rx_remain) {
-        if (tx_remain && !pio_sm_is_tx_fifo_full(pio, sm)) {
-            *txfifo = 0;
-            --tx_remain;
-        }
-        if (rx_remain && !pio_sm_is_rx_fifo_empty(pio, sm)) {
-            *dst++ = *rxfifo;
-            --rx_remain;
-        }
-    }
-}
-
-void __time_critical_func(pio_spi_write8_read8_blocking)(PIO pio, uint sm, uint8_t *src, uint8_t *dst,
-                                                         size_t len) {
-    size_t tx_remain = len, rx_remain = len;
-    io_rw_8 *txfifo = (io_rw_8 *) &pio->txf[sm];
-    io_rw_8 *rxfifo = (io_rw_8 *) &pio->rxf[sm];
-    while (tx_remain || rx_remain) {
-        if (tx_remain && !pio_sm_is_tx_fifo_full(pio, sm)) {
-            *txfifo = *src++;
-            --tx_remain;
-        }
-        if (rx_remain && !pio_sm_is_rx_fifo_empty(pio, sm)) {
-            *dst++ = *rxfifo;
-            --rx_remain;
-        }
-    }
-}
-#endif
-
 static inline bool __time_critical_func(psram_is_completed)(PIO pio) {
     return pio_interrupt_get(pio, 0);
 }
@@ -130,8 +77,8 @@ void __time_critical_func(psram_write)(PIO pio, uint sm) {
     pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write, 32, false));
     pio_sm_put_blocking(pio, sm, 0x02000000UL);
     // write 8 bits:
-    pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write,  8, true));
-    pio_sm_put_blocking(pio, sm, 0xAA000000UL);
+    pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write, 16, true));
+    pio_sm_put_blocking(pio, sm, 0x55AA0000UL);
     psram_wait_for_completion(pio);
     psram_set_ce(pio, sm);
 }
@@ -141,15 +88,15 @@ void __time_critical_func(psram_read)(PIO pio, uint sm) {
     // write 32 bits, cmd 0x0B, address 0x00_00_00
     pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write, 32, false));
     pio_sm_put_blocking(pio, sm, 0x0B000000UL);
-    // wait 8 bits:
+    // wait 8 clocks:
     pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write,  8, false));
     pio_sm_put_blocking(pio, sm, 0x00000000UL);
-    // read 8 bits:
-    pio_sm_put_blocking(pio, sm, psram_op(spi_offset_read,   8,  true));
-    for (int i = 0; i < 1; i++) {
+    // read 16 bits:
+    pio_sm_put_blocking(pio, sm, psram_op(spi_offset_read,  16,  true));
+    for (int i = 0; i < 2; i++) {
         printf("await read\n");
         uint32_t data = pio_sm_get_blocking(pio, sm);
-        printf("read %08x\n", data);
+        printf("read %02x\n", data);
     }
     //printf("wait_for_completion\n");
     psram_wait_for_completion(pio);
