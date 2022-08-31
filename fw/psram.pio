@@ -103,43 +103,48 @@ static inline void psram_qwrite(PIO pio, uint sm, uint offset) {
 }
 %}
 
-.program spi_wr_rd
+.program spi
 .side_set 1
 
 .wrap_target
-wrloop:
-    out pins, 1         side 0b0
-    jmp x-- wrloop      side 0b1    ; X contains number of bits to write - 1
-    jmp !y reset        side 0b0    ; nothing to read?
-
-    nop                 side 0b1
-    nop                 side 0b0
-    nop                 side 0b1
-rdloop:
-    in  pins, 1         side 0b0
-    jmp y-- rdloop      side 0b1    ; Y contains number of bits to read - 1
-
-reset:
-    out null, 32        side 0b0    ; clear data
-    irq wait 0          side 0b0    ; set IRQ to indicate completion and wait until cleared by C code
 public entry_point:
-    out x, 8            side 0b0    ; X = number of bits to write - 1
-   ;jmp !x reset        side 0b0    ; if X==0 then retry
-    out y, 8            side 0b0    ; Y = number of bits to read - 1
+    pull                side 0      ; pull 32-bits  = qpppppnn nnn----- -------- --------
+    out y, 1            side 0      ; q = 1 for IRQ0 desired on completion
+    out pc, 5           side 0      ; ppppp = PC to jump to (write, read)
+
+public write:
+    out x, 5            side 0      ; nnnnn = number of bits to write - 1 (0..31 = 1..32)
+    pull                side 0      ; pull 32 bits of data to write
+wrloop:
+    out pins, 1         side 0
+    jmp x-- wrloop      side 1
+    jmp complete        side 0
+
+public read:
+    out x, 5            side 0      ; nnnnn = number of bits to read - 1 (0..31 = 1..32)
+rdloop:
+    nop                 side 1
+    nop                 side 0
+    in  pins, 1         side 0
+    jmp x-- rdloop      side 1
+
+complete:
+    jmp !y entry_point  side 0      ; if Y=0, skip IRQ0 set/wait
+    irq wait 0          side 0      ; set IRQ0 to indicate completion and wait until cleared by C code
 .wrap
 
 % c-sdk {
 #include "hardware/gpio.h"
-static inline void pio_spi_cs_init(PIO pio, uint sm, uint prog_offs,
-    uint n_bits, float clkdiv, bool cpol,
+static inline void pio_spi_init(PIO pio, uint sm, uint prog_offs,
+    float clkdiv, bool cpol,
     uint pin_clk, uint pin_mosi, uint pin_miso
 ) {
-    pio_sm_config c = spi_wr_rd_program_get_default_config(prog_offs);
+    pio_sm_config c = spi_program_get_default_config(prog_offs);
     sm_config_set_out_pins(&c, pin_mosi, 1);
     sm_config_set_in_pins(&c, pin_miso);
     sm_config_set_sideset_pins(&c, pin_clk);
-    sm_config_set_out_shift(&c, false, true, 32);
-    sm_config_set_in_shift(&c, false, true, n_bits);
+    sm_config_set_out_shift(&c, false, false, 0);
+    sm_config_set_in_shift(&c, false, true, 8);
     sm_config_set_clkdiv(&c, clkdiv);
 
     pio_sm_set_pins_with_mask(pio, sm, (1u << pin_clk), (1u << pin_clk) | (1u << pin_mosi));
@@ -156,7 +161,7 @@ static inline void pio_spi_cs_init(PIO pio, uint sm, uint prog_offs,
     pio_set_irq1_source_enabled(pio, pis_interrupt0 + sm, false);
     pio_interrupt_clear(pio, sm);
 
-    uint entry_point = prog_offs + spi_wr_rd_offset_entry_point;
+    uint entry_point = prog_offs + spi_offset_entry_point;
     pio_sm_init(pio, sm, entry_point, &c);
     pio_sm_set_enabled(pio, sm, true);
 }

@@ -9,3 +9,5 @@ void __time_critical_func(pio_spi_write8_read8_blocking)(PIO pio, uint sm, uint8
 
 void __time_critical_func(psram_reset)(PIO pio, uint sm);
 void __time_critical_func(psram_read_eid)(PIO pio, uint sm);
+void __time_critical_func(psram_write)(PIO pio, uint sm);
+void __time_critical_func(psram_read)(PIO pio, uint sm);

@@ -200,8 +200,10 @@ int main() {
     // set_sys_clock_48mhz();
     // puts("sys: set 84Mhz...");
     // set_sys_clock_khz( 84000, true);
-    puts("sys: set 133Mhz...");
-    set_sys_clock_khz(133000, true);
+    puts("sys: set 104Mhz...");
+    set_sys_clock_khz(104000, true);
+    // puts("sys: set 133Mhz...");
+    // set_sys_clock_khz(133000, true);
     // puts("sys: set 144Mhz...");
     // set_sys_clock_khz(144000, true);
     // puts("sys: set 266Mhz...");
@@ -229,10 +231,10 @@ int main() {
     // Load the psram_qspi_write program, and configure a free state machine
     // to run the program.
     PIO pio = pio0;
-    uint offset = pio_add_program(pio, &spi_wr_rd_program);
+    const uint offset = 0;
+    pio_add_program_at_offset(pio, &spi_program, offset);
     uint sm = pio_claim_unused_sm(pio, true);
-    pio_spi_cs_init(pio, sm, offset,
-        8,
+    pio_spi_init(pio, sm, offset,
         1.0f,
         false,
         PCS_B_CLK_133MHZ,
@@ -260,9 +262,41 @@ int main() {
     sleep_us(1);
 #endif
 
-#if 1
+#if 0
     puts("psram: read_eid");
     psram_read_eid(pio, sm);
+
+#if LOGIC_ANALYZER
+    // The logic analyser should have started capturing as soon as it saw the
+    // first transition. Wait until the last sample comes in from the DMA.
+    dma_channel_wait_for_finish_blocking(la_dma_chan);
+
+    la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
+
+    la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
+    sleep_us(1);
+#endif
+#endif
+
+#if 1
+    puts("psram: write");
+    psram_write(pio, sm);
+
+#if LOGIC_ANALYZER
+    // The logic analyser should have started capturing as soon as it saw the
+    // first transition. Wait until the last sample comes in from the DMA.
+    dma_channel_wait_for_finish_blocking(la_dma_chan);
+
+    la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
+
+    la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
+    sleep_us(1);
+#endif
+#endif
+
+#if 1
+    puts("psram: read");
+    psram_read(pio, sm);
 
 #if LOGIC_ANALYZER
     // The logic analyser should have started capturing as soon as it saw the
@@ -301,7 +335,7 @@ int main() {
 #endif
 
     printf("done\n");
-    sleep_us(1);
+    sleep_us(100);
 
     return 0;
 }
