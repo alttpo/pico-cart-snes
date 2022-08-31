@@ -228,30 +228,14 @@ int main() {
     la_init(la_pio, la_sm, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, 1.f);
 #endif
 
-    puts("psram: load SPI PIO...");
-
-    // Load the psram_qspi_write program, and configure a free state machine
-    // to run the program.
-    PIO pio = pio0;
-    const uint offset = 0;
-    pio_add_program_at_offset(pio, &spi_program, offset);
-    uint sm = pio_claim_unused_sm(pio, true);
-    pio_spi_init(pio, sm, offset,
-        1.0f,
-        false,
-        PCS_B_CLK_133MHZ,
-        PCS_B_PSRAM_SIO0,
-        PCS_B_PSRAM_SIO1
-    );
-
 #if LOGIC_ANALYZER
     puts("la_arm...");
     la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
     sleep_us(1);
 #endif
 
-    puts("psram: reset");
-    psram_reset(pio, sm);
+    puts("psram: init...");
+    psram_init();
 
 #if LOGIC_ANALYZER
     // The logic analyser should have started capturing as soon as it saw the
@@ -266,7 +250,7 @@ int main() {
 
 #if 0
     puts("psram: read_eid");
-    psram_read_eid(pio, sm);
+    psram_read_eid();
 
 #if LOGIC_ANALYZER
     // The logic analyser should have started capturing as soon as it saw the
@@ -282,7 +266,7 @@ int main() {
 
 #if 1
     puts("psram: write");
-    psram_write(pio, sm);
+    psram_write();
 
 #if LOGIC_ANALYZER
     // The logic analyser should have started capturing as soon as it saw the
@@ -298,7 +282,55 @@ int main() {
 
 #if 1
     puts("psram: read");
-    psram_read(pio, sm);
+    psram_read();
+
+#if LOGIC_ANALYZER
+    // The logic analyser should have started capturing as soon as it saw the
+    // first transition. Wait until the last sample comes in from the DMA.
+    dma_channel_wait_for_finish_blocking(la_dma_chan);
+
+    la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
+
+    la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
+    sleep_us(1);
+#endif
+#endif
+
+#if 1
+    puts("psram: quad mode");
+    psram_set_qpi_mode();
+
+#if LOGIC_ANALYZER
+    // The logic analyser should have started capturing as soon as it saw the
+    // first transition. Wait until the last sample comes in from the DMA.
+    dma_channel_wait_for_finish_blocking(la_dma_chan);
+
+    la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
+
+    la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
+    sleep_us(1);
+#endif
+#endif
+
+#if 1
+    puts("psram: quad read");
+    psram_qread();
+
+#if LOGIC_ANALYZER
+    // The logic analyser should have started capturing as soon as it saw the
+    // first transition. Wait until the last sample comes in from the DMA.
+    dma_channel_wait_for_finish_blocking(la_dma_chan);
+
+    la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
+
+    la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
+    sleep_us(1);
+#endif
+#endif
+
+#if 1
+    puts("psram: spi mode");
+    psram_set_spi_mode();
 
 #if LOGIC_ANALYZER
     // The logic analyser should have started capturing as soon as it saw the
@@ -310,34 +342,8 @@ int main() {
 #endif
 #endif
 
-#if 0
-    puts("psram: enter quad mode...");
-
-    // switch PSRAM to quad mode:
-    psram_spi_cmd0(0x35);
-
-    puts("psram: load PIO...");
-
-    // Load the psram_qspi_write program, and configure a free state machine
-    // to run the program.
-    PIO pio = pio0;
-    uint offset = pio_add_program(pio, &psram_qspi_program);
-    uint sm = pio_claim_unused_sm(pio, true);
-    psram_qspi_program_init(pio, sm, offset, PCS_B_PSRAM_SIO0);
- 
-    // write 8 nybbles, 2 for cmd and 6 for addr:
-    puts("psram: write 8 nybbles...");
-    psram_write(pio, sm, offset);
-    pio_sm_put_blocking(pio, sm, 0x07UL);                           // count-1 of data
-    pio_sm_put_blocking(pio, sm, reverse_nybbles(0x38000000UL));    // cmd, addr
-    pio_sm_put_blocking(pio, sm, reverse_nybbles(0x12345678UL));    // data
-
-    puts("psram: wait...");
-    while (!pio_sm_is_exec_stalled(pio, sm)) tight_loop_contents();
-#endif
-
     printf("done\n");
-    sleep_us(1000);
+    sleep_us(10000);
 
     return 0;
 }
