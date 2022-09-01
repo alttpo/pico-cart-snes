@@ -13,6 +13,7 @@ uint sm = 0;
 const uint offset = 0;
 int dma_chan = -1;
 dma_channel_config dma_config = {0};
+bool qpi_mode = false;
 
 // reverses bit order of each nibble in each byte:
 // 1000 -> 0001
@@ -55,29 +56,41 @@ static inline uint32_t __time_critical_func(psram_op)(uint32_t pc, uint32_t bits
 }
 
 static inline void __time_critical_func(psram_cmd0)(uint32_t cmd) {
+    if (qpi_mode) {
+        panic("psram: SPI function called in QPI mode!");
+    }
     psram_clr_ce();
     // write 8 bits:
     pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write, 8, true));
-    pio_sm_put_blocking(pio, sm, cmd << 24);
+    pio_sm_put(pio, sm, cmd << 24);
     psram_wait_for_completion();
     psram_set_ce();
 }
 
 void __time_critical_func(psram_qcmd0)(uint32_t cmd) {
+    if (!qpi_mode) {
+        panic("psram: QPI function called in SPI mode!");
+    }
     psram_clr_ce();
     // write 2 nibbles:
-    pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write, 2, true));
-    pio_sm_put_blocking(pio, sm, cmd << 24);
+    pio_sm_put_blocking(pio, sm, psram_op(qspi_offset_write, 2, true));
+    pio_sm_put(pio, sm, cmd << 24);
     psram_wait_for_completion();
     psram_set_ce();
 }
 
 void __time_critical_func(psram_reset)() {
+    if (qpi_mode) {
+        panic("psram: SPI function called in QPI mode!");
+    }
     psram_cmd0(0x66UL); // reset enable
     psram_cmd0(0x99UL); // reset
 }
 
 void __time_critical_func(psram_read_eid)() {
+    if (qpi_mode) {
+        panic("psram: SPI function called in QPI mode!");
+    }
     #if 0
     psram_clr_ce(pio, sm);
     // write 32 bits, cmd 0x9F, address 0xAA_AA_AA
@@ -97,19 +110,35 @@ void __time_critical_func(psram_read_eid)() {
     #endif
 }
 
-void __time_critical_func(psram_write)() {
+void __time_critical_func(psram_write)(uint32_t addr, uint32_t* words, uint size_bytes) {
+    if (qpi_mode) {
+        panic("psram: SPI function called in QPI mode!");
+    }
+
     psram_clr_ce();
-    // write 32 bits, cmd 0x02, address 0x00_00_00:
+    // write 32 bits, cmd 0x02, address:
     pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write, 32, false));
-    pio_sm_put_blocking(pio, sm, 0x02000000UL);
-    // write 8 bits:
-    pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write, 16, true));
-    pio_sm_put_blocking(pio, sm, 0x55AA0000UL);
+    pio_sm_put(pio, sm, 0x02000000UL | (addr & 0x00FFFFFFUL));
+    // write data bits:
+    int word_count = size_bytes / 4;
+    uint remaining_bytes = size_bytes & 3;
+    for (int i = 0; i < word_count; i++) {
+        bool final = (remaining_bytes == 0) && (i == word_count - 1);
+        pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write, 32, final));
+        pio_sm_put(pio, sm, *words++);
+    }
+    if (remaining_bytes != 0) {
+        pio_sm_put_blocking(pio, sm, psram_op(spi_offset_write, remaining_bytes*8, true));
+        pio_sm_put(pio, sm, *words);
+    }
     psram_wait_for_completion();
     psram_set_ce();
 }
 
 void __time_critical_func(psram_read)(uint32_t addr, uint32_t* d, uint size) {
+    if (qpi_mode) {
+        panic("psram: SPI function called in QPI mode!");
+    }
     dma_channel_configure(
         dma_chan,
         &dma_config,
@@ -135,6 +164,7 @@ void __time_critical_func(psram_read)(uint32_t addr, uint32_t* d, uint size) {
 
 void __time_critical_func(psram_set_qpi_mode)() {
     psram_cmd0(0x35UL); // enter quad mode
+    qpi_mode = true;
 
     // disable SPI state machine:
     pio_sm_set_enabled(pio, sm, false);
@@ -153,6 +183,7 @@ void __time_critical_func(psram_set_qpi_mode)() {
 
 void __time_critical_func(psram_set_spi_mode)() {
     psram_qcmd0(0xF5UL); // exit quad mode
+    qpi_mode = false;
 
     // disable QSPI state machine:    
     pio_sm_set_enabled(pio, sm, false);

@@ -46,4 +46,6 @@ pico_add_extra_outputs(${PROJECT_NAME})
 pico_enable_stdio_uart(${PROJECT_NAME} 0) # DISABLE
 pico_enable_stdio_usb(${PROJECT_NAME} 1)  # ENABLE
 
+target_compile_options(${PROJECT_NAME} INTERFACE -DPICO_ENTER_USB_BOOT_ON_EXIT=1)
+
 target_compile_definitions(${PROJECT_NAME} PUBLIC LOGIC_ANALYZER=1)

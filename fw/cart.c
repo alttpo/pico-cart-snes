@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 #include "pico/stdlib.h"
+#include "pico/bootrom.h"
 #include "hardware/clocks.h"
 #include "hardware/pio.h"
 #include "hardware/spi.h"
@@ -268,7 +269,9 @@ int main() {
 
 #if 1
     puts("psram: write");
-    psram_write();
+    d[0] = 0x55aa0000UL;
+    d[1] = 0;
+    psram_write(0x000000UL, d, 2);
 
 #if LOGIC_ANALYZER
     // The logic analyser should have started capturing as soon as it saw the
@@ -284,6 +287,8 @@ int main() {
 
 #if 1
     puts("psram: read");
+    d[0] = 0;
+    d[1] = 0;
     psram_read(0x000000UL, d, 2);
 
     printf("read %02x %02x\n", d[0], d[1]);
@@ -350,7 +355,9 @@ int main() {
 
     printf("done\n");
     stdio_flush();
-    sleep_us(10000);
+    sleep_ms(250);
+
+    reset_usb_boot(0, 0);
 
     return 0;
 }
