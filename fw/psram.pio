@@ -1,10 +1,9 @@
 ; QSPI Pins:
-;   OUT pin 0 = SIO0/SI   LSB
-;   OUT pin 1 = SIO1/SO
-;   OUT pin 2 = SIO2
-;   OUT pin 3 = SIO3      MSB
-;   OUT pin 4 = CE#
-;   OUT pin 5 = CLK
+;   OUT  pin 0 = SIO0/SI   LSB
+;   OUT  pin 1 = SIO1/SO
+;   OUT  pin 2 = SIO2
+;   OUT  pin 3 = SIO3      MSB
+;   SIDE pin 0 = CLK
 
 ; NOTE: since pins are in 0..3 order physically, each nybble (both TX and RX) must be bit-reversed at the system level
 
@@ -13,31 +12,59 @@
 
 .wrap_target
 public entry_point:
-    pull                side 0      ; pull 32-bits  = qpppppnn nnn----- -------- --------
-    out y, 1            side 0      ; q = 1 for IRQ0 desired on completion
-    out pc, 5           side 0      ; ppppp = PC to jump to (write, read)
+    jmp entry_point side 0  ; spin until explicit sm_exec `jmp write` or `jmp read`
 
 public write:
-    out x, 5            side 0      ; nnnnn = number of nibbles to write - 1 (0..7 = 1..8)
-    pull                side 0      ; pull 32 bits of data to write
-    set pindirs, 0b1111 side 0      ; set pins to outputs
-wrloop:
-    out pins, 4         side 0 [1]
-    jmp x-- wrloop      side 1 [1]
-    jmp complete        side 0
+    ; MUST sm_restart before JMP here
+    ; OSR = nnnnnnnn aaaaaaaa aaaaaaaa aaaaaaaa
+    ;       n = nibble count of data to write
+    ;       a = 24-bit address
+    out x, 8        side 0
+    ; write 2 nibbles of command 0x38
+    set pins, 0x3   side 0
+    set y, 5        side 1      ; setup to write 6 nibbles of a = 24-bit address:
+    set pins, 0x8   side 0
+public command_written:
+    nop             side 1      ; replace with `jmp write_complete side 1` if only writing command
+wradloop:
+    out pins, 4         side 0  ; a = 24-bit address
+    jmp y-- wradloop    side 1
+    ; write n nibbles of data:
+wrdtloop:
+    out pins, 4         side 0
+    jmp x-- wrdtloop    side 1
+public write_complete:
+    set pins, 0         side 0
+    jmp entry_point     side 0
 
 public read:
-    out x, 5            side 0      ; nnnnn = number of nibbles to read - 1 (0..7 = 1..8)
-    set pindirs, 0b0000 side 0      ; set pins to inputs
-rdloop:
+    ; MUST sm_restart before JMP here
+    ; OSR = nnnnnnnn aaaaaaaa aaaaaaaa aaaaaaaa
+    ;       n = nibble count of data to read
+    ;       a = 24-bit address
+    out x, 8        side 0
+    ; write 2 nibbles of command 0xEB
+    set pins, 0xE   side 0
+    nop             side 1
+    set pins, 0xB   side 0
+    ; write 6 nibbles of a = 24-bit address:
+    set y, 5        side 1
+rdadloop:
+    out pins, 4         side 0  ; a = 24-bit address
+    jmp y-- rdadloop    side 1
+    ; wait 6 cycles:
+    set y, 5            side 0
+waitloop:
     nop                 side 1
+    jmp y-- waitloop    side 0
+    set pindirs, 0b0000 side 1  ; switch pins to input mode
     nop                 side 0
-    in  pins, 4         side 0
-    jmp x-- rdloop      side 1      ; FIXME: extra clock pulse on last bit
-
-complete:
-    jmp !y entry_point  side 0      ; if Y=0, skip IRQ0 set/wait
-    irq wait 0          side 0      ; set IRQ0 to indicate completion and wait until cleared by C code
+    ; read n nibbles of data:
+rddtloop:
+    in  pins, 4         side 1
+    jmp x-- rddtloop    side 0
+    set pindirs, 0b1111 side 0  ; switch pins back to output mode
+    set pins, 0         side 0
 .wrap
 
 % c-sdk {
@@ -51,11 +78,11 @@ static inline void pio_qspi_init(PIO pio, uint sm, uint prog_offs,
     sm_config_set_set_pins(&c, pin_sio0, 4);
     sm_config_set_in_pins(&c, pin_sio0);
     sm_config_set_sideset_pins(&c, pin_clk);
-    sm_config_set_out_shift(&c, false, false, 0);
+    sm_config_set_out_shift(&c, false, true, 32);
     sm_config_set_in_shift(&c, false, true, 8);
     sm_config_set_clkdiv(&c, clkdiv);
 
-    pio_sm_set_pins_with_mask(pio, sm, (1u << pin_clk), (1u << pin_clk) | (15u << pin_sio0));
+    //pio_sm_set_pins_with_mask(pio, sm, (1u << pin_clk), (1u << pin_clk) | (15u << pin_sio0));
     pio_sm_set_pindirs_with_mask(pio, sm, (1u << pin_clk) | (15u << pin_sio0), (1u << pin_clk) | (15u << pin_sio0));
     pio_gpio_init(pio, pin_sio0+0);
     pio_gpio_init(pio, pin_sio0+1);
@@ -70,9 +97,9 @@ static inline void pio_qspi_init(PIO pio, uint sm, uint prog_offs,
 
     // Clear IRQ flag before starting, and make sure flag doesn't actually
     // assert a system-level interrupt (we're using it as a status flag)
-    pio_set_irq0_source_enabled(pio, pis_interrupt0 + sm, false);
-    pio_set_irq1_source_enabled(pio, pis_interrupt0 + sm, false);
-    pio_interrupt_clear(pio, sm);
+    //pio_set_irq0_source_enabled(pio, pis_interrupt0 + sm, false);
+    //pio_set_irq1_source_enabled(pio, pis_interrupt0 + sm, false);
+    //pio_interrupt_clear(pio, sm);
 
     uint entry_point = prog_offs + qspi_offset_entry_point;
     pio_sm_init(pio, sm, entry_point, &c);
@@ -106,6 +133,7 @@ rdloop:
     jmp x-- rdloop      side 1      ; FIXME: extra clock pulse on last bit
 
 complete:
+    set pins, 0         side 0
     jmp !y entry_point  side 0      ; if Y=0, skip IRQ0 set/wait
     irq wait 0          side 0      ; set IRQ0 to indicate completion and wait until cleared by C code
 .wrap
@@ -124,7 +152,7 @@ static inline void pio_spi_init(PIO pio, uint sm, uint prog_offs,
     sm_config_set_in_shift(&c, false, true, 8);
     sm_config_set_clkdiv(&c, clkdiv);
 
-    pio_sm_set_pins_with_mask(pio, sm, (1u << pin_clk), (1u << pin_clk) | (1u << pin_mosi));
+    //pio_sm_set_pins_with_mask(pio, sm, (1u << pin_clk), (1u << pin_clk) | (1u << pin_mosi));
     pio_sm_set_pindirs_with_mask(pio, sm, (1u << pin_clk) | (1u << pin_mosi), (1u << pin_clk) | (1u << pin_mosi) | (1u << pin_miso));
     pio_gpio_init(pio, pin_mosi);
     pio_gpio_init(pio, pin_miso);

@@ -39,6 +39,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         hardware_pio
         hardware_spi
         hardware_dma
+        hardware_pwm
         )
 
 pico_add_extra_outputs(${PROJECT_NAME})

@@ -12,6 +12,7 @@
 #include "hardware/clocks.h"
 #include "hardware/pio.h"
 #include "hardware/spi.h"
+#include "hardware/pwm.h"
 #if LOGIC_ANALYZER
 #include "hardware/dma.h"
 #endif
@@ -207,12 +208,16 @@ int main() {
     // set_sys_clock_khz(104000, true);
     // puts("sys: set 133Mhz...");
     // set_sys_clock_khz(133000, true);
-    // puts("sys: set 144Mhz...");
-    // set_sys_clock_khz(144000, true);
-    puts("sys: set 208Mhz...");
-    set_sys_clock_khz(208000, true);
+    puts("sys: set 144Mhz...");
+    set_sys_clock_khz(144000, true);
+    // puts("sys: set 208Mhz...");
+    // set_sys_clock_khz(208000, true);
     // puts("sys: set 266Mhz...");
     // set_sys_clock_khz(266000, true);
+
+    // 288MHz panics :(
+    // puts("sys: set 288Mhz...");
+    // set_sys_clock_khz(288000, true);
 
 #if LOGIC_ANALYZER
 #define CAPTURE_N_SAMPLES 384
@@ -234,7 +239,6 @@ int main() {
 #if LOGIC_ANALYZER
     puts("la_arm...");
     la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
-    sleep_us(1);
 #endif
 
     puts("psram: init...");
@@ -248,7 +252,6 @@ int main() {
     la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
 
     la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
-    sleep_us(1);
 #endif
 
 #if 0
@@ -263,7 +266,6 @@ int main() {
     la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
 
     la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
-    sleep_us(1);
 #endif
 #endif
 
@@ -281,7 +283,6 @@ int main() {
     la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
 
     la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
-    sleep_us(1);
 #endif
 #endif
 
@@ -301,7 +302,6 @@ int main() {
     la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
 
     la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
-    sleep_us(1);
 #endif
 #endif
 
@@ -317,7 +317,6 @@ int main() {
     la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
 
     la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
-    sleep_us(1);
 #endif
 #endif
 
@@ -335,7 +334,6 @@ int main() {
     la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
 
     la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
-    sleep_us(1);
 #endif
 #endif
 
@@ -349,7 +347,6 @@ int main() {
     dma_channel_wait_for_finish_blocking(la_dma_chan);
 
     la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
-    sleep_us(1);
 #endif
 #endif
 
@@ -357,6 +354,15 @@ int main() {
     stdio_flush();
     sleep_ms(250);
 
+    // Set up the gpclk generator
+    clocks_hw->clk[clk_gpout0].ctrl = (CLOCKS_CLK_GPOUT0_CTRL_AUXSRC_VALUE_CLK_SYS << CLOCKS_CLK_GPOUT0_CTRL_AUXSRC_LSB) |
+                                 CLOCKS_CLK_GPOUT0_CTRL_ENABLE_BITS;
+    clocks_hw->clk[clk_gpout0].div = 100 << CLOCKS_CLK_GPOUT0_DIV_INT_LSB;
+    // Set gpio pin to gpclock function
+    gpio_set_function(21, GPIO_FUNC_GPCK);
+
+    // wait for keypress and then reboot:
+    getchar();
     reset_usb_boot(0, 0);
 
     return 0;
