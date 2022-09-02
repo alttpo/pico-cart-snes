@@ -58,11 +58,12 @@ waitloop:
     nop                 side 1
     jmp y-- waitloop    side 0
     set pindirs, 0b0000 side 1  ; switch pins to input mode
-    nop                 side 0
+    ; NOTE: remove [1] delays here and jmp below if running below 266MHz
+    nop                 side 0 [1]
     ; read n nibbles of data:
 rddtloop:
     in  pins, 4         side 1
-    jmp x-- rddtloop    side 0
+    jmp x-- rddtloop    side 0 [1]
     set pindirs, 0b1111 side 0  ; switch pins back to output mode
     set pins, 0         side 0
 .wrap
