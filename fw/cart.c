@@ -130,6 +130,13 @@ int main() {
 
     stdio_init_all();
 
+    // Set up the gpclk generator
+    clocks_hw->clk[clk_gpout0].ctrl = (CLOCKS_CLK_GPOUT0_CTRL_AUXSRC_VALUE_CLK_SYS << CLOCKS_CLK_GPOUT0_CTRL_AUXSRC_LSB) |
+                                 CLOCKS_CLK_GPOUT0_CTRL_ENABLE_BITS;
+    clocks_hw->clk[clk_gpout0].div = 100 << CLOCKS_CLK_GPOUT0_DIV_INT_LSB;
+    // Set gpio pin to gpclock function
+    gpio_set_function(21, GPIO_FUNC_GPCK);
+
     // take software control over PSRAM to initialize it:
     gpio_set_function(PCS_B_PSRAM_SIO0, GPIO_FUNC_SIO);
     gpio_set_function(PCS_B_PSRAM_SIO1, GPIO_FUNC_SIO);
@@ -218,6 +225,14 @@ int main() {
     // 288MHz panics :(
     // puts("sys: set 288Mhz...");
     // set_sys_clock_khz(288000, true);
+
+    // generate clock pulse on SNES CE# line at 3.58MHz (NTSC):
+    gpio_set_function(28, GPIO_FUNC_PWM);
+    uint slice_num = pwm_gpio_to_slice_num(28);
+    pwm_set_wrap(slice_num, 1);
+    pwm_set_gpio_level(28, 1);
+    pwm_set_clkdiv(slice_num, 266.f / 3.58f * 0.5f);  // = 266MHz / 3.58MHz
+    pwm_set_enabled(slice_num, true);
 
 #if LOGIC_ANALYZER
 #define CAPTURE_N_SAMPLES 384
@@ -353,13 +368,6 @@ int main() {
     printf("done\n");
     stdio_flush();
     sleep_ms(250);
-
-    // Set up the gpclk generator
-    clocks_hw->clk[clk_gpout0].ctrl = (CLOCKS_CLK_GPOUT0_CTRL_AUXSRC_VALUE_CLK_SYS << CLOCKS_CLK_GPOUT0_CTRL_AUXSRC_LSB) |
-                                 CLOCKS_CLK_GPOUT0_CTRL_ENABLE_BITS;
-    clocks_hw->clk[clk_gpout0].div = 100 << CLOCKS_CLK_GPOUT0_DIV_INT_LSB;
-    // Set gpio pin to gpclock function
-    gpio_set_function(21, GPIO_FUNC_GPCK);
 
     // wait for keypress and then reboot:
     getchar();
