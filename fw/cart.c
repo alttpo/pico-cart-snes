@@ -121,13 +121,16 @@ void psram_spi_read_eid() {
 #if LOGIC_ANALYZER
 void la_init(PIO pio, uint sm, uint pin_base, uint pin_count, float div);
 void la_arm(PIO pio, uint sm, uint dma_chan, uint32_t *capture_buf, size_t capture_size_words, uint trigger_pin, bool trigger_level);
+void la_reset(PIO pio, uint sm, uint dma_chan, uint32_t *capture_buf, size_t capture_size_words);
 void la_print_capture_buf(const uint32_t *buf, uint pin_base, uint pin_count, uint32_t n_samples);
+void la_print_vertical(const uint32_t *buf, uint pin_base, uint pin_count, uint32_t n_samples);
 uint la_calc_buf_size_words(uint samples, uint pins);
 #endif
 
-int main() {
-    uint32_t d[2] = {0,0};
+void do_psram_tests();
+void do_snes_tests();
 
+int main() {
     stdio_init_all();
 
     // Set up the gpclk generator
@@ -226,13 +229,22 @@ int main() {
     // puts("sys: set 288Mhz...");
     // set_sys_clock_khz(288000, true);
 
-    // generate clock pulse on SNES CE# line at 3.58MHz (NTSC):
-    gpio_set_function(28, GPIO_FUNC_PWM);
-    uint slice_num = pwm_gpio_to_slice_num(28);
-    pwm_set_wrap(slice_num, 1);
-    pwm_set_gpio_level(28, 1);
-    pwm_set_clkdiv(slice_num, 266.f / 3.58f * 0.5f);  // = 266MHz / 3.58MHz
-    pwm_set_enabled(slice_num, true);
+    // do_psram_tests();
+    do_snes_tests();
+
+    printf("done\n");
+    stdio_flush();
+    sleep_ms(250);
+
+    // wait for keypress and then reboot:
+    getchar();
+    reset_usb_boot(0, 0);
+
+    return 0;
+}
+
+void do_psram_tests() {
+    uint32_t d[2] = {0,0};
 
 #if LOGIC_ANALYZER
 #define CAPTURE_N_SAMPLES 384
@@ -364,14 +376,45 @@ int main() {
     la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
 #endif
 #endif
-
-    printf("done\n");
-    stdio_flush();
-    sleep_ms(250);
-
-    // wait for keypress and then reboot:
-    getchar();
-    reset_usb_boot(0, 0);
-
-    return 0;
 }
+
+void do_snes_tests() {
+    // generate clock pulse on SNES CE# line at 3.58MHz (NTSC):
+    gpio_set_function(28, GPIO_FUNC_PWM);
+    uint slice_num = pwm_gpio_to_slice_num(28);
+    pwm_set_wrap(slice_num, 1);
+    pwm_set_gpio_level(28, 1);
+    pwm_set_clkdiv(slice_num, 266.f / 3.58f * 0.5f);  // = 266MHz / 3.58MHz
+    pwm_set_enabled(slice_num, true);
+
+#if LOGIC_ANALYZER
+#define CAPTURE_N_SAMPLES 256
+#define CAPTURE_PIN_COUNT 32
+#define CAPTURE_PIN_BASE 0
+
+    uint      la_buf_size_words = la_calc_buf_size_words(CAPTURE_N_SAMPLES, CAPTURE_PIN_COUNT);
+    uint32_t *la_capture_buf = malloc(la_buf_size_words * sizeof(uint32_t));
+    hard_assert(la_capture_buf);
+
+    PIO  la_pio = pio1;
+    uint la_sm = pio_claim_unused_sm(la_pio, true);
+    uint la_dma_chan = dma_claim_unused_channel(true);
+
+    la_init(la_pio, la_sm, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, 1.f);
+#endif
+
+    while (true) {
+#if LOGIC_ANALYZER
+        // la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
+        la_reset(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words);
+#endif
+
+#if LOGIC_ANALYZER
+        dma_channel_wait_for_finish_blocking(la_dma_chan);
+
+        // la_print_capture_buf(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
+        la_print_vertical(la_capture_buf, CAPTURE_PIN_BASE, CAPTURE_PIN_COUNT, CAPTURE_N_SAMPLES);
+#endif
+    }
+}
+

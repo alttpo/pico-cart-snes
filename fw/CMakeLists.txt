@@ -49,4 +49,7 @@ pico_enable_stdio_usb(${PROJECT_NAME} 1)  # ENABLE
 
 target_compile_options(${PROJECT_NAME} INTERFACE -DPICO_ENTER_USB_BOOT_ON_EXIT=1)
 
-target_compile_definitions(${PROJECT_NAME} PUBLIC LOGIC_ANALYZER=1)
+target_compile_definitions(${PROJECT_NAME} PUBLIC
+        LOGIC_ANALYZER=1
+        PICO_STDIO_USB_STDOUT_TIMEOUT_US=2000000000
+        )

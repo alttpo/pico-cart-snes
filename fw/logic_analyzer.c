@@ -86,6 +86,28 @@ void la_arm(PIO pio, uint sm, uint dma_chan, uint32_t *capture_buf, size_t captu
     pio_sm_set_enabled(pio, sm, true);
 }
 
+void la_reset(PIO pio, uint sm, uint dma_chan, uint32_t *capture_buf, size_t capture_size_words) {
+    pio_sm_set_enabled(pio, sm, false);
+    // Need to clear _input shift counter_, as well as FIFO, because there may be
+    // partial ISR contents left over from a previous run. sm_restart does this.
+    pio_sm_clear_fifos(pio, sm);
+    pio_sm_restart(pio, sm);
+
+    dma_channel_config c = dma_channel_get_default_config(dma_chan);
+    channel_config_set_read_increment(&c, false);
+    channel_config_set_write_increment(&c, true);
+    channel_config_set_dreq(&c, pio_get_dreq(pio, sm, false));
+
+    dma_channel_configure(dma_chan, &c,
+        capture_buf,        // Destination pointer
+        &pio->rxf[sm],      // Source pointer
+        capture_size_words, // Number of transfers
+        true                // Start immediately
+    );
+
+    pio_sm_set_enabled(pio, sm, true);
+}
+
 void la_print_capture_buf(const uint32_t *buf, uint pin_base, uint pin_count, uint32_t n_samples) {
     // Display the capture buffer in text form, like this:
     // 00: __--__--__--__--__--__--
@@ -102,6 +124,29 @@ void la_print_capture_buf(const uint32_t *buf, uint pin_base, uint pin_count, ui
             // Data is left-justified in each FIFO entry, hence the (32 - record_size_bits) offset
             uint word_mask = 1u << (bit_index % record_size_bits + 32 - record_size_bits);
             printf(buf[word_index] & word_mask ? "-" : "_");
+        }
+        printf("\n");
+    }
+}
+
+void la_print_vertical(const uint32_t *buf, uint pin_base, uint pin_count, uint32_t n_samples) {
+    for (int pin = 0; pin < pin_count; ++pin) {
+        uint bit_index = pin + pin_base;
+        printf("[%2d]", bit_index);
+    }
+    printf("\n");
+
+    // Each FIFO record may be only partially filled with bits, depending on
+    // whether pin_count is a factor of 32.
+    uint record_size_bits = bits_packed_per_word(pin_count);
+    for (int sample = 0; sample < n_samples; ++sample) {
+        for (int pin = 0; pin < pin_count; ++pin) {
+            //printf("%02d: ", pin + pin_base);
+            uint bit_index = pin + sample * pin_count;
+            uint word_index = bit_index / record_size_bits;
+            // Data is left-justified in each FIFO entry, hence the (32 - record_size_bits) offset
+            uint word_mask = 1u << (bit_index % record_size_bits + 32 - record_size_bits);
+            printf(buf[word_index] & word_mask ? "[ |]" : "[| ]");
         }
         printf("\n");
     }
