@@ -1,0 +1,21 @@
+; IN
+;  0 - ADDR1QH
+;  1 - ADDR2QH
+;  2 - ADDR3QH
+;  3 - ADDR4QH
+; ...
+; 20 - SNES_CE# (for WAIT only)
+; SIDE
+;  0 - CLK
+;  1 - ADDR_CE#
+;  2 - ADDR_LD#
+
+.program snes_address
+.side_set 3
+
+.wrap_target
+    nop             side 0b110   ; keep both CE# and LD# high
+    wait 0 pin 20   side 0b010   ; wait until SNES_CE# goes low then toggle ADDR_LD# low while keeping ADDR_CE# high
+    nop             side 0b010   ; need 6ns for ADDR_LD#
+    set y, 3        side 0b110   ; hold time for ADDR_LD#
+.wrap
