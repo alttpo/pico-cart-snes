@@ -29,8 +29,7 @@ add_executable(pico-cart-snes)
 pico_generate_pio_header(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/psram.pio)
 
 target_sources(${PROJECT_NAME} PRIVATE
-        cart.c
-        psram.c
+        main.c
         logic_analyzer.c
         )
 
@@ -53,3 +52,9 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC
         LOGIC_ANALYZER=1
         PICO_STDIO_USB_STDOUT_TIMEOUT_US=2000000000
         )
+
+# re-configure stage2 boot to divide clock by 4 since we want to run at 288MHz
+pico_define_boot_stage2(pico-div4 ${PICO_DEFAULT_BOOT_STAGE2_FILE})
+target_compile_definitions(pico-div4 PRIVATE PICO_FLASH_SPI_CLKDIV=4)
+
+pico_set_boot_stage2(${PROJECT_NAME} pico-div4)
