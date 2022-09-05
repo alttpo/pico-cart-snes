@@ -131,6 +131,25 @@ void do_psram_tests();
 void do_snes_tests();
 
 int main() {
+    // puts("sys: set 48Mhz...");
+    // set_sys_clock_48mhz();
+    // puts("sys: set 84Mhz...");
+    // set_sys_clock_khz( 84000, true);
+    // puts("sys: set 104Mhz...");
+    // set_sys_clock_khz(104000, true);
+    // puts("sys: set 133Mhz...");
+    // set_sys_clock_khz(133000, true);
+    // puts("sys: set 144Mhz...");
+    // set_sys_clock_khz(144000, true);
+    // puts("sys: set 208Mhz...");
+    // set_sys_clock_khz(208000, true);
+    // puts("sys: set 266Mhz...");
+    // set_sys_clock_khz(266000, true);
+
+    // 288MHz panics :(
+    puts("sys: set 288Mhz...");
+    set_sys_clock_khz(288000, true);
+
     stdio_init_all();
 
     // Set up the gpclk generator
@@ -210,27 +229,8 @@ int main() {
         sleep_ms(10);
     }
 
-    // puts("sys: set 48Mhz...");
-    // set_sys_clock_48mhz();
-    // puts("sys: set 84Mhz...");
-    // set_sys_clock_khz( 84000, true);
-    // puts("sys: set 104Mhz...");
-    // set_sys_clock_khz(104000, true);
-    // puts("sys: set 133Mhz...");
-    // set_sys_clock_khz(133000, true);
-    // puts("sys: set 144Mhz...");
-    // set_sys_clock_khz(144000, true);
-    // puts("sys: set 208Mhz...");
-    // set_sys_clock_khz(208000, true);
-    puts("sys: set 266Mhz...");
-    set_sys_clock_khz(266000, true);
-
-    // 288MHz panics :(
-    // puts("sys: set 288Mhz...");
-    // set_sys_clock_khz(288000, true);
-
-    // do_psram_tests();
-    do_snes_tests();
+    do_psram_tests();
+    //do_snes_tests();
 
     printf("done\n");
     stdio_flush();
@@ -386,6 +386,19 @@ void do_snes_tests() {
     pwm_set_gpio_level(28, 1);
     pwm_set_clkdiv(slice_num, 266.f / 3.58f * 0.5f);  // = 266MHz / 3.58MHz
     pwm_set_enabled(slice_num, true);
+
+    // load snesaddr program:
+    PIO pio = pio0;
+    uint sm = pio_claim_unused_sm(pio, true);
+
+    // TODO:
+    // 1. "psram_read" DMA read from psram tx fifo, write to GPIO pins D0..D7, continuously
+    // 2. "psram_write" DMA read from GPIO pins D0..D7, write to psram rx fifo, continuously
+    // 3. "read" PIO to wait on RD#=0 then out pindirs D0..D7 output, wait on CE#=1, loop
+    // 4. "write" PIO to wait on WR#=0 then out pindirs D0..D7 input, wait on CE#=1, loop
+    // 5. "addr" PIO to wait on CE#=0 then pulse shift regs 6 or 8 times write to rx fifo, wait on CE#=1, loop
+    // 6. C code to block on "addr" PIO rx fifo, translate address with quick array lookups, issue psram qread which DMAs straight to D0..D7 pins
+
 
 #if LOGIC_ANALYZER
 #define CAPTURE_N_SAMPLES 256
