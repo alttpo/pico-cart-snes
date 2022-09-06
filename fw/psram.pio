@@ -2,10 +2,11 @@
 
 ; specific QPI data write command 38 xx xx xx yy where x = 24-bit address, y = 8-bit data byte to write:
 .program psram_qpiw
-.side_set 2         ; 0=CE#, 1=CLK
+.side_set 2 opt         ; 0=CE#, 1=CLK
 
 .wrap_target
-    pull                side 0b01       ; CE#=1; await 24-bit address plus 8-bit data
+    nop                 side 0b01       ; CE#=1
+    pull                                ; await 24-bit address plus 8-bit data
     set pindirs, 0b1111 side 0b00       ; switch pins to output mode
     set pins, 0x3       side 0b00       ; write 2 nibbles of command 0x38
     set y, 7            side 0b10       ; setup to write 8 nibbles = 6 nibbles of 24-bit address plus 2 nibbles of 8-bit data:
@@ -19,10 +20,11 @@ wrloop:                                 ; write nibbles at 144MHz
 
 ; specific QPI data read  command EB xx xx xx where x = 24-bit address:
 .program psram_qpir
-.side_set 2         ; 0=CE#, 1=CLK
+.side_set 2 opt         ; 0=CE#, 1=CLK
 
 .wrap_target
-    pull                side 0b01       ; CE#=1; discard any existing OSR contents to read a clean FIFO element next
+    nop                 side 0b01       ; CE#=1
+    pull                                ; CE#=1; discard any existing OSR contents to read a clean FIFO element next
     set pindirs, 0b1111 side 0b00       ; switch pins to output mode
     set pins, 0xE       side 0b00       ; write 2 nibbles of command 0xEB
     nop                 side 0b10

@@ -82,12 +82,12 @@ void __time_critical_func(psram_set_qpi_mode)() {
 
     // load both QPI programs:
     pio_sm_claim(psram_pio, psram_qpiw_sm);
-    //pio_sm_claim(psram_pio, psram_qpir_sm);
+    pio_sm_claim(psram_pio, psram_qpir_sm);
     psram_qpiw_offset = pio_add_program(psram_pio, &psram_qpiw_program);
-    //psram_qpir_offset = pio_add_program(psram_pio, &psram_qpir_program);
+    psram_qpir_offset = pio_add_program(psram_pio, &psram_qpir_program);
 
     pio_sm_config cw = psram_qpiw_program_get_default_config(psram_qpiw_offset);
-    //pio_sm_config cr = psram_qpir_program_get_default_config(psram_qpir_offset);
+    pio_sm_config cr = psram_qpir_program_get_default_config(psram_qpir_offset);
 
     sm_config_set_out_pins(&cw, PCS_B_PSRAM_SIO0, 4);
     sm_config_set_set_pins(&cw, PCS_B_PSRAM_SIO0, 4);
@@ -95,13 +95,13 @@ void __time_critical_func(psram_set_qpi_mode)() {
     sm_config_set_out_shift(&cw, false, false, 32);
     sm_config_set_clkdiv(&cw, 1.f);
 
-    //sm_config_set_out_pins(&cr, PCS_B_PSRAM_SIO0, 4);
-    //sm_config_set_set_pins(&cr, PCS_B_PSRAM_SIO0, 4);
-    //sm_config_set_in_pins(&cr, PCS_B_PSRAM_SIO0);
-    //sm_config_set_sideset_pins(&cr, PCS_B_PSRAM_CE);
-    //sm_config_set_out_shift(&cr, false, false, 32);
-    //sm_config_set_in_shift(&cr, false, true, 8);
-    //sm_config_set_clkdiv(&cr, 1.f);
+    sm_config_set_out_pins(&cr, PCS_B_PSRAM_SIO0, 4);
+    sm_config_set_set_pins(&cr, PCS_B_PSRAM_SIO0, 4);
+    sm_config_set_in_pins(&cr, PCS_B_PSRAM_SIO0);
+    sm_config_set_sideset_pins(&cr, PCS_B_PSRAM_CE);
+    sm_config_set_out_shift(&cr, false, false, 32);
+    sm_config_set_in_shift(&cr, false, true, 8);
+    sm_config_set_clkdiv(&cr, 1.f);
 
     pio_gpio_init(psram_pio, PCS_B_PSRAM_SIO0);
     pio_gpio_init(psram_pio, PCS_B_PSRAM_SIO1);
@@ -111,7 +111,7 @@ void __time_critical_func(psram_set_qpi_mode)() {
     pio_gpio_init(psram_pio, PCS_B_CLK_133MHZ);
 
     pio_sm_init(psram_pio, psram_qpiw_sm, psram_qpiw_offset, &cw);
-    //pio_sm_init(psram_pio, psram_qpir_sm, psram_qpir_offset, &cr);
+    pio_sm_init(psram_pio, psram_qpir_sm, psram_qpir_offset, &cr);
 
     // this only needs to be done once and can use either state machine:
     pio_sm_set_pindirs_with_mask(
@@ -132,14 +132,21 @@ void __time_critical_func(psram_set_qpi_mode)() {
     );
 
     pio_sm_set_enabled(psram_pio, psram_qpiw_sm, true);
-    //pio_sm_set_enabled(psram_pio, psram_qpir_sm, true);
+    pio_sm_set_enabled(psram_pio, psram_qpir_sm, true);
 
     psram_qpi_mode = true;
 }
 
 void __time_critical_func(psram_qpi_write)(uint32_t address, uint32_t data) {
+    //pio_sm_set_enabled(psram_pio, psram_qpiw_sm, true);
     pio_sm_put_blocking(psram_pio, psram_qpiw_sm, (address << 8) | (data & 0xFF));
 }
+void __time_critical_func(psram_qpi_read)(uint32_t address) {
+    //pio_sm_set_enabled(psram_pio, psram_qpir_sm, true);
+    pio_sm_put_blocking(psram_pio, psram_qpir_sm, (address << 8));
+}
+
+
 
 PIO  la_pio = pio1;
 uint la_sm = 3;
