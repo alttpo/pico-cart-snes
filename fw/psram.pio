@@ -1,18 +1,48 @@
 ; assumes PIO clock at 288MHz
 
-.program psram_qpi_write
-.side_set 1 ; CLK
+; specific QPI data write command 38 xx xx xx yy where x = 24-bit address, y = 8-bit data byte to write:
+.program psram_qpiw
+.side_set 2         ; 0=CE#, 1=CLK
 
 .wrap_target
-    nop side 0
+    pull                side 0b01       ; CE#=1; await 24-bit address plus 8-bit data
+    set pindirs, 0b1111 side 0b00       ; switch pins to output mode
+    set pins, 0x3       side 0b00       ; write 2 nibbles of command 0x38
+    set y, 7            side 0b10       ; setup to write 8 nibbles = 6 nibbles of 24-bit address plus 2 nibbles of 8-bit data:
+    set pins, 0x8       side 0b00
+    nop                 side 0b10
+wrloop:                                 ; write nibbles at 144MHz
+    out pins, 4         side 0b00 [0]   ; CE#=0; CLK=0;
+    jmp y-- wrloop      side 0b10 [0]   ; CE#=0; CLK=1;
+    set pins, 0         side 0b01 [0]   ; write terminate
 .wrap
 
-
-.program psram_qpi_read
-.side_set 1 ; CLK
+; specific QPI data read  command EB xx xx xx where x = 24-bit address:
+.program psram_qpir
+.side_set 2         ; 0=CE#, 1=CLK
 
 .wrap_target
-    nop side 0
+    pull                side 0b01       ; CE#=1; discard any existing OSR contents to read a clean FIFO element next
+    set pindirs, 0b1111 side 0b00       ; switch pins to output mode
+    set pins, 0xE       side 0b00       ; write 2 nibbles of command 0xEB
+    nop                 side 0b10
+    set pins, 0xB       side 0b00
+    set y, 5            side 0b10       ; setup to write 6 nibbles of a = 24-bit address:
+wrloop:                                 ; write address nibbles at 144MHz
+    out pins, 4         side 0b00 [0]   ; CE#=0; CLK=0;
+    jmp y-- wrloop      side 0b10 [0]   ; CE#=0; CLK=1;
+
+    set y, 5            side 0b00       ; wait 6 cycles
+waitloop:
+    nop                 side 0b10
+    jmp y-- waitloop    side 0b00
+
+    set pindirs, 0b0000 side 0b10       ; switch pins to input mode
+    set y, 1            side 0b00 [2]   ; read 2 nibbles of data
+rddtloop:
+    in  pins, 4         side 0b10
+    jmp y-- rddtloop    side 0b00 [1]
+    set pins, 0         side 0b00
 .wrap
 
 
@@ -28,4 +58,5 @@
 wrloop:                             ; write bits at 144MHz
     out pins, 1     side 0b00 [1]   ; CE#=0; CLK=0;
     jmp x-- wrloop  side 0b10 [1]   ; CE#=0; CLK=1;
+    set pins, 0     side 0b00       ; clear pins
 .wrap
