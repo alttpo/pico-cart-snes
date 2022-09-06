@@ -38,6 +38,15 @@ void __time_critical_func(psram_init)(void) {
     pio_gpio_init(psram_pio, PCS_B_PSRAM_CE);
     pio_gpio_init(psram_pio, PCS_B_CLK_133MHZ);
 
+    // disable input sync on SIO[3..0] pins:
+    hw_set_bits(
+        &psram_pio->input_sync_bypass,
+        PCS_MS_PSRAM_SIO0 |
+        PCS_MS_PSRAM_SIO1 |
+        PCS_MS_PSRAM_SIO2 |
+        PCS_MS_PSRAM_SIO3
+    );
+
     pio_sm_init(psram_pio, psram_spi_sm, psram_spi_offset, &c);
 
     pio_sm_set_pindirs_with_mask(
