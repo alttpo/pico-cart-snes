@@ -13,17 +13,17 @@ PIO     psram_pio = pio0;
 uint    psram_spi_sm = 0;
 uint    psram_spi_offset = 0;
 
-void psram_spi_command0(uint32_t command) {
+static inline void __time_critical_func(psram_spi_command0)(uint32_t command) {
     pio_sm_put_blocking(psram_pio, psram_spi_sm, 7);
     pio_sm_put(psram_pio, psram_spi_sm, command << 24);
 }
 
-void psram_reset(void) {
+void __time_critical_func(psram_reset)(void) {
     psram_spi_command0(0x66U);
     psram_spi_command0(0x99U);
 }
 
-void psram_init(void) {
+void __time_critical_func(psram_init)(void) {
     pio_sm_claim(psram_pio, psram_spi_sm);
     psram_spi_offset = pio_add_program(psram_pio, &psram_spi_write_program);
     pio_sm_config c = psram_spi_write_program_get_default_config(psram_spi_offset);
@@ -63,7 +63,7 @@ void psram_init(void) {
 PIO  la_pio = pio1;
 uint la_sm = 3;
 
-#define SAMPLE_COUNT 256
+#define SAMPLE_COUNT 1024
 
 int main(void) {
     // set sys clock to 288MHz:

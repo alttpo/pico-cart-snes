@@ -22,11 +22,10 @@
 .side_set 2         ; 0=CE#, 1=CLK
 
 .wrap_target
-    pull            side 0b01       ; pull 32 bits for count of bits to write
+    pull            side 0b01       ; CE#=1; discard any existing OSR contents to read a clean FIFO element next
     out x, 32       side 0b01       ; X = number of bits - 1
     pull            side 0b01       ; CE#=1; keep high while awaiting bytes
 wrloop:                             ; write bits at 144MHz
     out pins, 1     side 0b00 [1]   ; CE#=0; CLK=0;
     jmp x-- wrloop  side 0b10 [1]   ; CE#=0; CLK=1;
-    out null, 32    side 0b01       ; CE#=1; discard any existing OSR contents to read a clean FIFO element next
 .wrap
