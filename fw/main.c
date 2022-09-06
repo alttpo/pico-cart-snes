@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include "pico/stdlib.h"
 #include "pico/bootrom.h"
 #include "hardware/pio.h"
@@ -138,15 +139,22 @@ void __time_critical_func(psram_set_qpi_mode)() {
 }
 
 void __time_critical_func(psram_qpi_write)(uint32_t address, uint32_t data) {
-    //pio_sm_set_enabled(psram_pio, psram_qpiw_sm, true);
-    pio_sm_put_blocking(psram_pio, psram_qpiw_sm, (address << 8) | (data & 0xFF));
+    pio_sm_put_blocking(psram_pio, psram_qpiw_sm, (address << 8));
+    pio_sm_put(psram_pio, psram_qpiw_sm, (data & 0xFF) << 24);
 }
+
 void __time_critical_func(psram_qpi_read)(uint32_t address) {
-    //pio_sm_set_enabled(psram_pio, psram_qpir_sm, true);
+    // read 8-bit data into RX FIFO:
     pio_sm_put_blocking(psram_pio, psram_qpir_sm, (address << 8));
 }
 
+void __time_critical_func(psram_test)(void) {
+    psram_qpi_write(0x000000U, 0xAA);
 
+    psram_qpi_read(0x000000U);
+    uint32_t data = pio_sm_get_blocking(psram_pio, psram_qpir_sm);
+    printf("data = %02x\n", data);
+}
 
 PIO  la_pio = pio1;
 uint la_sm = 3;
@@ -251,7 +259,7 @@ int main(void) {
 
     la_arm(la_pio, la_sm, la_dma_chan, la_capture_buf, la_buf_size_words, PCS_B_PSRAM_CE, false);
 
-    psram_qpi_write(0x000000U, 0xAA);
+    psram_test();
 
     dma_channel_wait_for_finish_blocking(la_dma_chan);
     la_print_capture_buf(la_capture_buf, PCS_B_PSRAM_SIO0, 6, SAMPLE_COUNT);
